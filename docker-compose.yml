@@ -1,0 +1,54 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=leasecheck
+      - POSTGRES_PASSWORD=leasecheck
+      - POSTGRES_DB=leasecheck
+    ports:
+      - "5432:5432"
+    volumes:
+      - leasecheck_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U leasecheck"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql+psycopg2://leasecheck:leasecheck@postgres:5432/leasecheck
+      - JWT_SECRET=${JWT_SECRET:-dev-secret-change-me-in-production}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.5-flash}
+      - ALLOWED_ORIGINS=http://localhost:5173
+      - FRONTEND_URL=http://localhost:5173
+    volumes:
+      - ./backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: sh -c "alembic upgrade head && uvicorn main:app --host 0.0.0.0 --port 8000 --reload"
+
+  frontend:
+    image: node:20-slim
+    working_dir: /frontend
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_BASE=http://localhost:8000
+    volumes:
+      - ./frontend:/frontend
+    command: sh -c "npm install && npm run dev -- --host"
+    depends_on:
+      - backend
+
+volumes:
+  leasecheck_pgdata:

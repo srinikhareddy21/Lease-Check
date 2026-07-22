@@ -1,0 +1,66 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  @apply font-body bg-paper text-slate-800 antialiased;
+  @apply dark:bg-slate-950 dark:text-slate-100;
+}
+
+h1, h2, h3, h4 {
+  @apply font-display;
+}
+
+::selection {
+  background: rgba(37, 99, 235, 0.2);
+}
+
+/* Glassmorphism card, used across dashboard/documents/analysis surfaces */
+.glass-card {
+  @apply relative rounded-2xl border border-white/60 bg-white/80 backdrop-blur-sm shadow-soft;
+  @apply dark:border-slate-700/60 dark:bg-slate-900/70;
+}
+
+.glass-panel {
+  @apply relative rounded-3xl border border-white/50 bg-white/60 backdrop-blur-md shadow-glass;
+  @apply dark:border-slate-700/50 dark:bg-slate-900/50;
+}
+
+.brand-gradient {
+  background: linear-gradient(135deg, #1E3A8A 0%, #2563EB 55%, #3B82F6 100%);
+}
+
+.brand-gradient-text {
+  background: linear-gradient(135deg, #1E3A8A 0%, #2563EB 60%, #F59E0B 120%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.focus-ring {
+  @apply outline-none focus-visible:ring-2 focus-visible:ring-secondary focus-visible:ring-offset-2 focus-visible:ring-offset-paper dark:focus-visible:ring-offset-slate-950;
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  @apply bg-slate-300 dark:bg-slate-700 rounded-full;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
