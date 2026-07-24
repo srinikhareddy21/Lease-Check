@@ -82,6 +82,10 @@ export default function AnalysisResult() {
     if (!id) return;
     setDeleting(true);
     await documentsApi.remove(id);
+    // Without this, the documents/dashboard-stats queries stay cached as
+    // "fresh" for their 15s staleTime, so navigating back would keep
+    // showing the just-deleted document until a manual page reload.
+    invalidate();
     showToast("Document deleted.", "success");
     navigate("/documents");
   };

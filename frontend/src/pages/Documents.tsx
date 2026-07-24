@@ -54,7 +54,15 @@ export default function Documents() {
     queryFn: () => documentsApi.list(params),
   });
 
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: ["documents"] });
+  // Invalidate every cache the rest of the app derives from the documents
+  // list: the list/grid itself, the dashboard's "Recent Activity" panel
+  // (queryKey ["documents", "recent"] — matched by the ["documents"] prefix),
+  // and the dashboard stat cards, which live under a separate key and were
+  // previously never refreshed after a delete/favorite/re-analyze here.
+  const invalidate = () => {
+    queryClient.invalidateQueries({ queryKey: ["documents"] });
+    queryClient.invalidateQueries({ queryKey: ["dashboard-stats"] });
+  };
 
   const handleFavorite = async (id: string) => {
     await documentsApi.toggleFavorite(id);

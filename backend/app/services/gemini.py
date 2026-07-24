@@ -16,7 +16,7 @@ Extended for the SaaS redesign:
   - A separate chat function answers follow-up questions about a specific
     lease, using the extracted lease text as context.
 """
-import time
+
 import io
 import json
 from collections.abc import AsyncGenerator
@@ -31,35 +31,7 @@ from app.config import get_settings
 settings = get_settings()
 
 client = genai.Client(api_key=settings.gemini_api_key) if settings.gemini_api_key else None
-FALLBACK_MODELS = [
-    settings.gemini_model,
-    "gemini-2.5-flash-lite",
-    "gemini-2.5-flash",
-    "gemini-3.1-flash-lite",
-]
 
-def generate_with_fallback(contents, config):
-    last_error = None
-
-    for model in FALLBACK_MODELS:
-        for attempt in range(3):
-            try:
-                print(f"Trying model: {model}")
-                return client.models.generate_content(
-                    model=model,
-                    contents=contents,
-                    config=config,
-                )
-            except Exception as e:
-                last_error = e
-
-                if any(x in str(e) for x in ["503", "429", "UNAVAILABLE"]):
-                    time.sleep(2 ** attempt)
-                    continue
-
-                break
-
-    raise last_error
 ANALYSIS_SYSTEM_PROMPT = """You are LeaseCheck, an assistant that explains rental lease \
 agreements in plain, everyday language for tenants who are not lawyers.
 
@@ -207,71 +179,55 @@ async def stream_analysis(lease_text: str) -> AsyncGenerator[str, None]:
     if client is None:
         yield f"data: {json.dumps({'error': 'Server is missing GEMINI_API_KEY.'})}\n\n"
         return
-    
+
+    lease_text = lease_text[:60000]
+
     try:
-        response = generate_with_fallback(
-        contents=f"Here is the lease text:\n\n{lease_text}",
-        config=types.GenerateContentConfig(
-            system_instruction=ANALYSIS_SYSTEM_PROMPT,
-            max_output_tokens=4000,
-            response_mime_type="application/json",
-        ),
-    )
-
-
-        yield f"data: {json.dumps({'text': response.text})}\n\n"
+        stream = client.models.generate_content_stream(
+            model=settings.gemini_model,
+            contents=f"Here is the lease text:\n\n{lease_text}",
+            config=types.GenerateContentConfig(
+                system_instruction=ANALYSIS_SYSTEM_PROMPT,
+                max_output_tokens=4000,
+                response_mime_type="application/json",
+            ),
+        )
+        for chunk in stream:
+            if chunk.text:
+                yield f"data: {json.dumps({'text': chunk.text})}\n\n"
         yield f"data: {json.dumps({'done': True})}\n\n"
-
     except Exception as exc:
         yield f"data: {json.dumps({'error': str(exc)})}\n\n"
 
 
-async def stream_chat(
-    lease_text: str,
-    question: str,
-    history: list[dict],
-) -> AsyncGenerator[str, None]:
+async def stream_chat(lease_text: str, question: str, history: list[dict]) -> AsyncGenerator[str, None]:
     if client is None:
         yield f"data: {json.dumps({'error': 'Server is missing GEMINI_API_KEY.'})}\n\n"
         return
 
     contents = []
-
     for turn in history[-10:]:
         role = "model" if turn.get("role") == "assistant" else "user"
-        contents.append(
-            types.Content(
-                role=role,
-                parts=[types.Part(text=turn.get("content", ""))]
-            )
+        contents.append(types.Content(role=role, parts=[types.Part(text=turn.get("content", ""))]))
+
+    context_prefix = f"Lease text:\n\n{lease_text[:60000]}\n\nTenant question: "
+    contents.append(types.Content(role="user", parts=[types.Part(text=context_prefix + question)]))
+
+    try:
+        stream = client.models.generate_content_stream(
+            model=settings.gemini_model,
+            contents=contents,
+            config=types.GenerateContentConfig(
+                system_instruction=CHAT_SYSTEM_PROMPT,
+                max_output_tokens=800,
+            ),
         )
-
-    context_prefix = (
-        f"Lease text:\n\n{lease_text[:60000]}\n\nTenant question: "
-    )
-
-    contents.append(
-        types.Content(
-            role="user",
-            parts=[types.Part(text=context_prefix + question)]
-        )
-    )
-    try :
-        response = generate_with_fallback(
-    contents=contents,
-    config=types.GenerateContentConfig(
-        system_instruction=CHAT_SYSTEM_PROMPT,
-        max_output_tokens=800,
-    ),
-)
-
-
-        yield f"data: {json.dumps({'text': response.text})}\n\n"
+        for chunk in stream:
+            if chunk.text:
+                yield f"data: {json.dumps({'text': chunk.text})}\n\n"
         yield f"data: {json.dumps({'done': True})}\n\n"
-
     except Exception as exc:
         yield f"data: {json.dumps({'error': str(exc)})}\n\n"
-
 
 
 def parse_analysis_json(full_text: str) -> dict:
